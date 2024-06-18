@@ -31,7 +31,7 @@ class Lexer:
     def __init__(self, text):
         self.text = text
         self.pos = 0
-        self.current_char = self.text[self.pos]
+        self.current_char = self.text[self.pos] if self.pos < len(self.text) else None
 
     def advance(self):
         """Переміщуємо 'вказівник' на наступний символ вхідного рядка"""
@@ -56,7 +56,6 @@ class Lexer:
         else:
             return Token(TokenType.INTEGER, int(result))
 
-
     def get_next_token(self):
         """Лексичний аналізатор, що розбиває вхідний рядок на токени."""
         while self.current_char is not None:
@@ -64,8 +63,8 @@ class Lexer:
                 self.skip_whitespace()
                 continue
 
-            if self.current_char.isdigit():
-                return Token(TokenType.INTEGER, self.integer_or_float())
+            if self.current_char.isdigit() or self.current_char == '.':
+                return self.integer_or_float()
 
             if self.current_char == "+":
                 self.advance()
@@ -108,12 +107,7 @@ class BinOp(AST):
 
 class Num(AST):
     def __init__(self, token):
-        self.token = token
         self.value = token.value
-# class Num(AST):
-#     def __init__(self, token):
-#         self.token = token
-#         self.value = token.value
 
 
 class Parser:
@@ -135,37 +129,30 @@ class Parser:
             self.error()
 
     def term(self):
-        """Парсер для 'term' правил граматики. У нашому випадку - це цілі числа, операції ділення та множення"""
+        """Парсер для 'term' правил граматики. У нашому випадку - це операції множення та ділення"""
         node = self.factor()
 
         while self.current_token.type in (TokenType.MUL, TokenType.DIV):
             token = self.current_token
             if token.type == TokenType.MUL:
                 self.eat(TokenType.MUL)
-                node = BinOp(left=node, op=token, right=self.factor())
             elif token.type == TokenType.DIV:
                 self.eat(TokenType.DIV)
-                divisor = self.factor()
-                if divisor == 0:
-                    self.error("Division by zero")
-                node = BinOp(left=node, op=token, right=divisor)
-        return node
 
+            node = BinOp(left=node, op=token, right=self.factor())
+
+        return node
 
     def expr(self):
         """Парсер для арифметичних виразів."""
         node = self.term()
 
-        while self.current_token.type in (TokenType.PLUS, TokenType.MINUS, TokenType.MUL, TokenType.DIV):
+        while self.current_token.type in (TokenType.PLUS, TokenType.MINUS):
             token = self.current_token
             if token.type == TokenType.PLUS:
                 self.eat(TokenType.PLUS)
             elif token.type == TokenType.MINUS:
                 self.eat(TokenType.MINUS)
-            elif token.type == TokenType.MUL:
-                self.eat(TokenType.MUL)
-            elif token.type == TokenType.DIV:
-                self.eat(TokenType.DIV)
 
             node = BinOp(left=node, op=token, right=self.term())
 
@@ -177,15 +164,15 @@ class Parser:
 
         if token.type == TokenType.INTEGER:
             self.eat(TokenType.INTEGER)
-            return Num(token.value)
+            return Num(token)
         elif token.type == TokenType.FLOAT:
             self.eat(TokenType.FLOAT)
-            return Num(token.value)
+            return Num(token)
         elif token.type == TokenType.LPAREN:
             self.eat(TokenType.LPAREN)
-            result = self.expr()
+            node = self.expr()  # Рекурсивний виклик для обробки виразу в дужках
             self.eat(TokenType.RPAREN)
-            return result
+            return node
 
         self.error()
 
